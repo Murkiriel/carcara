@@ -143,11 +143,16 @@ ainda `townhall`, que a folha de origem não tem; isso é uma falha de lá, e a 
 
 ## Agendamento
 
-O workflow `gerar.yml` roda todo dia às 07:17 UTC (fora do minuto zero) e pode ser disparado à mão. A regra fica
-em `carcara/schedule.py`, e o workflow a consulta por `scripts/due.py`.
+O workflow `gerar.yml` roda todo dia às 06:17 e às 12:17 UTC (03:17 e 09:17 em Brasília, fora do minuto zero), como
+nos projetos irmãos, e pode ser disparado à mão. São dois por dia porque um disparo pulado não avisa ninguém: o segundo
+cobre o primeiro e, se o primeiro já publicou, só confere a data e para. A regra fica em `carcara/schedule.py`, e o
+workflow a consulta por `scripts/due.py`.
 
 - Job `interval`: lê o `built_at` do `catalogo.json` da raiz e só deixa gerar com 29 dias ou mais. A conta é
   arredondada (12 horas), para o horário da geração não empurrar a seguinte para o dia depois.
+- **Geração extra por data** (`GENERATE_FROM` no workflow, `--generate-from` no `due.py`), como nos projetos
+  irmãos: a partir do dia marcado (UTC), gera se a publicada for de antes dele, e tenta de novo nos dias seguintes
+  se falhar; depois de publicar, não tem mais efeito, e os 29 dias passam a contar dela. Marcada para 2026-10-06.
 - **Sem `catalogo.json` na raiz, o agendamento não gera.** A primeira geração é sempre disparada à mão, para a
   primeira release nunca sair sozinha. Nisto o projeto difere dos irmãos, de propósito.
 - Catálogo que não dá para ler, ou sem a data: o agendamento não gera, e o job termina com erro, para alguém ver.

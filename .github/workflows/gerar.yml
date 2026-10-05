@@ -1,9 +1,10 @@
 # Gera uma geração completa (recorte do build da Protomaps por estado -> pacotes leves -> recursos -> validação ->
 # catálogo) e publica a release e o catalogo.json pelo scripts/publish.py, com todas as travas dele.
 #
-# A cada 29 dias: todo dia o job "interval" lê a data da geração publicada (built_at do catalogo.json da raiz) e só
-# segue para a geração se ela tiver 29 dias ou mais (scripts/due.py). Se a geração falhar, tenta de novo no dia
-# seguinte: a publicada continua com a data velha.
+# A cada 29 dias, como nos projetos irmãos: todo dia, às 03:17 e às 09:17 em Brasília, o job "interval" lê a data da
+# geração publicada (built_at do catalogo.json da raiz) e só segue para a geração se ela tiver 29 dias ou mais, ou se
+# houver uma geração extra marcada (GENERATE_FROM) e a publicada for de antes dela (scripts/due.py). Se a geração
+# falhar, o disparo seguinte tenta de novo: a publicada continua com a data velha.
 #
 # A PRIMEIRA geração nunca sai sozinha: sem catalogo.json na raiz, o agendamento não gera. Ela é disparada à mão
 # (Actions -> gerar -> Run workflow), com "publish" marcado. À mão, a qualquer momento, o workflow gera; só publica
@@ -15,7 +16,8 @@ name: gerar
 
 on:
   schedule:
-    - cron: "17 7 * * *"   # todo dia, 04:17 em Brasília, fora do minuto zero (o job "interval" decide se gera)
+    - cron: "17 6 * * *"    # todo dia, 03:17 em Brasília (o job "interval" decide se gera), como nos projetos irmãos
+    - cron: "17 12 * * *"   # e 09:17 em Brasília, caso o primeiro seja pulado ou falhe
   workflow_dispatch:
     inputs:
       publish:
@@ -58,7 +60,11 @@ jobs:
         id: age
         env:
           MANUAL: ${{ github.event_name != 'schedule' && '--manual' || '' }}
-        run: python3 gerador/scripts/due.py $MANUAL
+          # Geração extra, fora do intervalo, como nos projetos irmãos: a partir desta data (UTC), gera se a geração
+          # publicada for de antes dela (e tenta de novo nos dias seguintes se falhar). Depois de publicar, não tem
+          # mais efeito, e os 29 dias passam a contar dessa geração. Vazio = só o intervalo.
+          GENERATE_FROM: "2026-10-06"
+        run: python3 gerador/scripts/due.py $MANUAL --generate-from "$GENERATE_FROM"
 
   generate:
     needs: interval

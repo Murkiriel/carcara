@@ -1,6 +1,7 @@
 # Carcará — mapa base do Brasil por estado, para uso offline
 
-> **Projeto novo.** A primeira release saiu em 2026-10-02, com o repositório ainda privado. O que já foi
+> **Projeto novo, público desde 2026-10-05.** A primeira release saiu em 2026-10-02, num repositório privado
+> que foi recriado público com um commit só; a geração publicada agora é a de 2026-10-05. O que já foi
 > conferido e o que ainda é suposição está separado em [`gerador/FONTES.md`](gerador/FONTES.md) e
 > [`gerador/PENDENCIAS.md`](gerador/PENDENCIAS.md).
 
@@ -92,16 +93,16 @@ Geração **2026-10-05-5b5261c4**: build da Protomaps de 2026-10-05, com dados d
 
 ## Situação
 
-| Item | Situação em 2026-10-02 |
+| Item | Situação em 2026-10-05 |
 |---|---|
 | Nome | `carcara`, definitivo desde 2026-10-02 ([`docs/DECISOES.md`](docs/DECISOES.md)) |
-| Repositório no GitHub | Criado em 2026-10-02, privado |
-| Gerador | Pronto: recorta o build por estado, passa a geração pelas nove travas de validação, monta o catálogo e publica ([`gerador/`](gerador/README.md)). Rodou inteiro em casa e no GitHub Actions. O agendamento (a cada 29 dias) está escrito e ainda não teve um disparo que gerasse |
-| Pacotes | Publicados em 2026-10-02, pelo GitHub Actions: 56 arquivos, 5,9 GB com os leves; 4,6 GB os 27 completos, o maior com 594 MB (tabela acima e [`gerador/PENDENCIAS.md`](gerador/PENDENCIAS.md)) |
+| Repositório no GitHub | Público desde 2026-10-05, recriado com um commit só depois da revisão de abertura |
+| Gerador | Pronto: recorta o build por estado, passa a geração pelas nove travas de validação, monta o catálogo e publica ([`gerador/`](gerador/README.md)). Rodou inteiro em casa e no GitHub Actions. O agendamento (a cada 29 dias, dois disparos por dia, e uma geração extra por data, como nos projetos irmãos) está escrito; a geração extra de 2026-10-06 é a primeira que sai por ele |
+| Pacotes | Publicados em 2026-10-05 pelo GitHub Actions (a primeira geração, de 2026-10-02, ficou no repositório antigo): 56 arquivos, 5,9 GB com os leves; 4,6 GB os 27 completos, o maior com 594 MB (tabela acima e [`gerador/PENDENCIAS.md`](gerador/PENDENCIAS.md)) |
 | Origem dos tiles | Decidida em 2026-10-01: só o recorte do build da Protomaps (etapa A) |
 | Medições | M1 a M5 feitas ([`gerador/PENDENCIAS.md`](gerador/PENDENCIAS.md)) |
 | Decisões com os números | Base até o zoom 9, pacote de estado desde o zoom 0, pacote leve até o zoom 13, 3 gerações ([`gerador/PENDENCIAS.md`](gerador/PENDENCIAS.md), X2 a X6) |
-| Próximo passo | Abrir o repositório; conferir o primeiro disparo agendado (ele só gera de novo com 29 dias) |
+| Próximo passo | Conferir a geração extra de 2026-10-06, a primeira pelo agendamento; depois, a cada 29 dias |
 
 ## Convenções
 
@@ -131,7 +132,7 @@ Todo formato publicado tem um campo de versão (`"schema": 1`), que só sobe qua
   (`…@users.noreply.github.com`).
 - Os arquivos gerados (`gerador/data/`) ficam fora do git: os pacotes vão para as releases.
 - Código e dados em commits separados.
-- Nasce privado e só fica público depois da revisão do dono.
+- Nasceu privado e ficou público em 2026-10-05, depois da revisão de abertura.
 
 ## Licenças
 

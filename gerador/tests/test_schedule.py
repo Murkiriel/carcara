@@ -6,7 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 GENERATOR = Path(__file__).resolve().parent.parent
@@ -73,6 +73,47 @@ class GenerationDueTest(unittest.TestCase):
         self.assertIn("29", reason)
 
 
+class ExtraGenerationTest(unittest.TestCase):
+    """Uma geração extra, fora do intervalo, como nos projetos irmãos: a partir do dia marcado, gera se a publicada
+    for de antes dele, e tenta de novo nos dias seguintes se falhar; depois de publicar, não tem mais efeito."""
+
+    PUBLISHED = "2026-10-05T14:19:28Z"
+    MARKED = date(2026, 10, 6)
+
+    def due(self, built_at, now, generate_from=MARKED, status=schedule.OK):
+        return schedule.generation_due(status, built_at, utc(now), 29, generate_from=generate_from)
+
+    def test_before_the_marked_day_it_waits(self):
+        self.assertFalse(self.due(self.PUBLISHED, "2026-10-05T23:59:00Z")[0])
+
+    def test_on_the_marked_day_it_generates(self):
+        due, reason = self.due(self.PUBLISHED, "2026-10-06T06:17:00Z")
+        self.assertTrue(due)
+        self.assertIn("2026-10-06", reason)
+
+    def test_keeps_trying_on_the_following_days_until_it_publishes(self):
+        self.assertTrue(self.due(self.PUBLISHED, "2026-10-06T12:17:00Z")[0])
+        self.assertTrue(self.due(self.PUBLISHED, "2026-10-08T06:17:00Z")[0])
+
+    def test_once_published_it_has_no_effect(self):
+        self.assertFalse(self.due("2026-10-06T06:40:00Z", "2026-10-06T12:17:00Z")[0])
+        self.assertFalse(self.due("2026-10-06T06:40:00Z", "2026-10-07T06:17:00Z")[0])
+
+    def test_the_interval_goes_on_counting_from_the_extra_generation(self):
+        self.assertFalse(self.due("2026-10-06T06:40:00Z", "2026-11-03T06:17:00Z")[0])
+        self.assertTrue(self.due("2026-10-06T06:40:00Z", "2026-11-04T06:17:00Z")[0])
+
+    def test_without_a_marked_day_only_the_interval_counts(self):
+        self.assertFalse(self.due(self.PUBLISHED, "2026-10-06T06:17:00Z", generate_from=None)[0])
+
+    def test_a_marked_day_does_not_hold_back_the_interval(self):
+        self.assertTrue(self.due("2026-09-01T07:10:00Z", "2026-10-01T06:17:00Z")[0])
+
+    def test_a_marked_day_never_makes_the_first_generation(self):
+        """A regra própria do Carcará vale também aqui: sem geração publicada, o agendamento não gera."""
+        self.assertFalse(self.due(None, "2026-10-06T06:17:00Z", status=schedule.MISSING)[0])
+
+
 class PublishedCatalogTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -121,7 +162,9 @@ class DueScriptTest(unittest.TestCase):
         env = {**os.environ, "GITHUB_OUTPUT": str(self.output)}
         done = subprocess.run([sys.executable, str(GENERATOR / "scripts" / "due.py"), "--catalog", str(catalog), *args],
                               capture_output=True, text=True, encoding="utf-8", env=env)
-        return done.returncode, self.output.read_text(encoding="utf-8"), done.stdout
+        # A data recusada pelo argparse sai antes de gravar a saída: nada gravado é "".
+        written = self.output.read_text(encoding="utf-8") if self.output.exists() else ""
+        return done.returncode, written, done.stdout
 
     def stamp(self, days_ago: int) -> str:
         built_at = (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -149,6 +192,13 @@ class DueScriptTest(unittest.TestCase):
     def test_manual(self):
         self.assertEqual((0, "run=true\n"), self.run_script(self.stamp(3), "--manual")[:2])
         self.assertEqual((0, "run=true\n"), self.run_script(None, "--manual")[:2])
+
+    def test_extra_generation_from_the_command_line(self):
+        self.assertEqual((0, "run=true\n"), self.run_script(self.stamp(3), "--generate-from", date.today().isoformat())[:2])
+        self.assertEqual((0, "run=false\n"), self.run_script(self.stamp(3), "--generate-from", "")[:2])
+
+    def test_a_bad_extra_date_is_an_error(self):
+        self.assertEqual(2, self.run_script(self.stamp(3), "--generate-from", "amanha")[0])
 
     def test_interval_from_the_command_line(self):
         self.assertEqual((0, "run=true\n"), self.run_script(self.stamp(3), "--interval-days", "2")[:2])

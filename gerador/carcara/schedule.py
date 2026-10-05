@@ -1,5 +1,6 @@
 """Quando gerar de novo: a geração publicada tem uma data (`built_at` do catalogo.json da raiz), e o agendamento só
-segue para a geração quando ela completa o intervalo. A linha de comando fica em scripts/due.py.
+segue para a geração quando ela completa o intervalo, ou no dia marcado para uma geração extra (como nos projetos
+irmãos). A linha de comando fica em scripts/due.py.
 
 Diferente dos projetos irmãos, de propósito: **sem geração publicada, o agendamento não gera.** A primeira geração é
 sempre disparada à mão, para a primeira release nunca sair sozinha. E um catálogo que não dá para ler também não
@@ -8,7 +9,7 @@ gera: quem decide é uma pessoa, e o job fica vermelho para ela ver.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -28,9 +29,13 @@ def read_published(catalog: Path) -> Tuple[str, Optional[str]]:
 
 
 def generation_due(status: str, built_at: Optional[str], now: datetime, interval_days: int,
-                   manual: bool = False) -> Tuple[bool, str]:
+                   manual: bool = False, generate_from: Optional[date] = None) -> Tuple[bool, str]:
     """(gera?, motivo). Os dias são arredondados, para o horário da geração não empurrar a seguinte para o dia
-    depois: uma geração que terminou às 08:00 conta 29 dias no agendamento das 07:17 do 29º dia."""
+    depois: uma geração que terminou às 08:00 conta 29 dias no agendamento das 06:17 do 29º dia.
+
+    `generate_from` marca uma geração extra, fora do intervalo: a partir desse dia (UTC), gera se a publicada for
+    de antes dele, e tenta de novo nos dias seguintes se falhar. Depois de publicar, não tem mais efeito, e o
+    intervalo passa a contar da geração extra. Nunca faz a primeira geração: essa continua sendo à mão."""
     if manual:
         return True, "disparado à mão: gera"
     if status == MISSING:
@@ -42,6 +47,8 @@ def generation_due(status: str, built_at: Optional[str], now: datetime, interval
     except ValueError:
         return False, ("o catálogo publicado não tem uma data legível: o agendamento não gera; conserte o catálogo "
                        "ou dispare à mão")
+    if generate_from and now.date() >= generate_from and built.date() < generate_from:
+        return True, f"geração extra marcada para {generate_from} (publicada em {built_at}): gera"
     days = (now - built + timedelta(hours=12)) // timedelta(days=1)
     if days >= interval_days:
         return True, f"geração publicada em {built_at} ({days} dias): gera"

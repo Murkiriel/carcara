@@ -1,0 +1,28 @@
+# Testes do gerador a cada push e pull request. Só os testes: nada de recortar o build da Protomaps nem de publicar
+# aqui (isso é o workflow de geração). Nenhum teste usa a rede além do servidor local que os próprios testes sobem.
+name: testes
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: gerador
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Dependências
+        run: pip install -r requirements.txt
+      - name: Ferramenta pmtiles (versão fixada, sha256 conferido)
+        run: python scripts/install_pmtiles.py --dest "$RUNNER_TEMP/pmtiles"
+      - name: Testes
+        run: python -m unittest discover -s tests -t . -v

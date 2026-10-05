@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# downloads, recortes e pacotes do gerador (vários GB): os pacotes vão para as releases, não para o git
+gerador/data/

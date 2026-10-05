@@ -1,0 +1,2 @@
+# Versões fixas.
+shapely==2.1.2     # polígono de cada UF com a margem, pela malha do IBGE

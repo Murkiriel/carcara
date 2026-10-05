@@ -1,0 +1,131 @@
+# Gera uma geração completa (recorte do build da Protomaps por estado -> pacotes leves -> recursos -> validação ->
+# catálogo) e publica a release e o catalogo.json pelo scripts/publish.py, com todas as travas dele.
+#
+# A cada 29 dias: todo dia o job "interval" lê a data da geração publicada (built_at do catalogo.json da raiz) e só
+# segue para a geração se ela tiver 29 dias ou mais (scripts/due.py). Se a geração falhar, tenta de novo no dia
+# seguinte: a publicada continua com a data velha.
+#
+# A PRIMEIRA geração nunca sai sozinha: sem catalogo.json na raiz, o agendamento não gera. Ela é disparada à mão
+# (Actions -> gerar -> Run workflow), com "publish" marcado. À mão, a qualquer momento, o workflow gera; só publica
+# se "publish" for marcado. Sem isso, gera e valida, e o relatório fica nos artefatos.
+#
+# O recorte é cópia de bytes: pede pouca memória e pouco processador. O que pesa é a rede (cerca de 4,8 GB baixados
+# do build, sempre com 4 pedidos em paralelo) e o disco (cerca de 6 GB de pacotes).
+name: gerar
+
+on:
+  schedule:
+    - cron: "17 7 * * *"   # todo dia, 04:17 em Brasília, fora do minuto zero (o job "interval" decide se gera)
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publicar a release e o catalogo.json no fim. Sem marcar: só gera e valida."
+        type: boolean
+        default: false
+      states:
+        description: "Só estas UFs, separadas por vírgula (ex.: DF,GO). Vazio: as 27. Geração parcial não é publicada."
+        type: string
+        default: ""
+      accept_drop:
+        description: "Aceitar pacote que encolheu além da tolerância em relação à geração publicada."
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate
+  cancel-in-progress: false
+
+jobs:
+  interval:
+    # O agendamento só vale no repositório do projeto: um fork não gera sozinho (à mão, gera onde for disparado).
+    if: github.event_name != 'schedule' || github.repository == 'Murkiriel/carcara'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.age.outputs.run }}
+    steps:
+      # A data vem do catalogo.json do checkout, não de um endereço de arquivo bruto do GitHub: num repositório
+      # privado esse endereço responde 404 e a data sumiria. No agendamento, o checkout é da ponta do main, não do
+      # commit em que o disparo foi criado: um disparo que esperou na fila atrás de uma publicação vê o catálogo novo.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.ref }}
+
+      - name: Idade da geração publicada
+        id: age
+        env:
+          MANUAL: ${{ github.event_name != 'schedule' && '--manual' || '' }}
+        run: python3 gerador/scripts/due.py $MANUAL
+
+  generate:
+    needs: interval
+    if: needs.interval.outputs.run == 'true'
+    # Imagem fixa, não a "latest": a ferramenta fixada e os passos abaixo só valem para a imagem testada.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: gerador
+    env:
+      PUBLISH: ${{ github.event_name == 'schedule' || inputs.publish == true }}
+      STATES: ${{ inputs.states }}
+      ACCEPT_DROP: ${{ inputs.accept_drop == true && '--accept-drop' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Dependências
+        run: pip install -r requirements.txt
+
+      - name: Ferramenta pmtiles (versão fixada, sha256 conferido)
+        run: python scripts/install_pmtiles.py --dest "$RUNNER_TEMP/pmtiles"
+
+      - name: Máquina
+        run: |
+          df -h .
+          free -h
+          echo "CPUs: $(nproc)"
+
+      - name: Gerar
+        run: |
+          mkdir -p data
+          ( while true; do
+              echo "$(date -u +%H:%M:%S) $(free -m | awk '/Mem:/{print "ram_used_mb="$3}') data=$(du -sBM data/ 2>/dev/null | cut -f1)"
+              sleep 30
+            done ) > data/recursos.log 2>&1 &
+          if [ -n "$STATES" ]; then
+            python generate.py --states "$STATES" $ACCEPT_DROP
+          else
+            python generate.py $ACCEPT_DROP
+          fi
+
+      - name: Guardar o relatório da geração
+        if: always()
+        run: |
+          mkdir -p relatorio
+          cp data/recursos.log data/dist/geracao.json data/dist/catalogo.json data/dist/pacotes.json relatorio/ 2>/dev/null || true
+          ls -la relatorio data/dist 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: relatorio-da-geracao
+          path: gerador/relatorio
+          retention-days: 14
+
+      - name: Publicar
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python scripts/publish.py --release --commit --push $ACCEPT_DROP

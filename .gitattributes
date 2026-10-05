@@ -1,0 +1,2 @@
+# Arquivos de tiles são binários: nada de conversão de fim de linha.
+*.pmtiles binary
